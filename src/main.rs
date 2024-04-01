@@ -39,6 +39,27 @@ struct Install {
     wanted_by: String,
 }
 
+#[derive(Clone)]
+struct Percent(u8);
+impl std::ops::Deref for Percent {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::str::FromStr for Percent {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let value = s.parse().map_err(|e| format!("{e}"))?;
+        if value > 100 {
+            return std::result::Result::Err("Percent must be [0, 100]".to_owned());
+        }
+        std::result::Result::Ok(Self(value))
+    }
+}
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -51,24 +72,22 @@ enum Command {
     /// needs `sudo`
     Set {
         /// battery charge % limit [0, 100]
-        value: u8,
+        value: Percent,
     },
     Get,
 }
+
 struct BatteryLimiter {}
 
 impl BatteryLimiter {
-    fn set(limit: u8) -> anyhow::Result<()> {
-        if limit > 100 {
-            anyhow::bail!("Limit must be <=100")
-        }
+    fn set(limit: Percent) -> anyhow::Result<()> {
         let mut linux_service: LinuxService =
             serde_ini::from_str(include_str!("../battery-charge-threshold.service")).unwrap();
 
         // TODO BAT0 is hardcoded
         linux_service.service.exec_start = format!(
             "/bin/bash -c 'echo {} > /sys/class/power_supply/BAT0/charge_control_end_threshold'",
-            limit
+            *limit
         );
         let service_path = "/etc/systemd/system/battery-charge-threshold.service";
         let service_contents = serde_ini::to_string(&linux_service).unwrap();
@@ -113,10 +132,10 @@ struct Something {
     another_section: Option<String>,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     match args.command {
-        Command::Set { value } => BatteryLimiter::set(value).unwrap(),
-        Command::Get => BatteryLimiter::get().unwrap(),
+        Command::Set { value } => BatteryLimiter::set(value),
+        Command::Get => BatteryLimiter::get(),
     }
 }
