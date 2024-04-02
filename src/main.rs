@@ -1,62 +1,38 @@
 // src: https://www.linuxuprising.com/2021/02/how-to-limit-battery-charging-set.html
 
-use anyhow::Ok;
+mod linux_service;
+
+use anyhow::{Error, Ok, Result};
 use clap::{Parser, Subcommand};
-use serde::{Deserialize, Serialize};
+
 use std::{fs, process};
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct LinuxService {
-    unit: Unit,
-    service: Service,
-    install: Install,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct Unit {
-    description: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct Service {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    user: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    working_directory: Option<String>,
-    exec_start: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    restart: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    restart_sec: Option<u32>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct Install {
-    wanted_by: String,
-}
+use linux_service::LinuxService;
 
 #[derive(Clone)]
 struct Percent(u8);
-impl std::ops::Deref for Percent {
-    type Target = u8;
+// impl std::ops::Deref for Percent {
+//     type Target = u8;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 impl std::str::FromStr for Percent {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let value = s.parse().map_err(|e| format!("{e}"))?;
+        const ERR_MSG: &str = "Percent must be an number between 0 and 100";
+        let value = s.parse().map_err(|_e| ERR_MSG)?;
         if value > 100 {
-            return std::result::Result::Err("Percent must be [0, 100]".to_owned());
+            return std::result::Result::Err(ERR_MSG.to_owned());
         }
         std::result::Result::Ok(Self(value))
+    }
+}
+impl std::fmt::Display for Percent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -69,29 +45,39 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// needs `sudo`
+    /// Change battery charge limit. Needs `sudo`
     Set {
-        /// battery charge % limit [0, 100]
+        /// Battery charge % limit [0, 100]
         value: Percent,
     },
+    /// Print current battery charge limit
     Get,
 }
 
-struct BatteryLimiter {}
-
+struct BatteryLimiter;
 impl BatteryLimiter {
-    fn set(limit: Percent) -> anyhow::Result<()> {
+    fn get_value() -> Result<Percent> {
+        fs::read_to_string("/sys/class/power_supply/BAT0/charge_control_end_threshold")?
+            .trim()
+            .parse::<Percent>()
+            .map_err(Error::msg)
+    }
+
+    fn set(limit: Percent) -> Result<()> {
+        let old_limit = Self::get_value()?;
         let mut linux_service: LinuxService =
             serde_ini::from_str(include_str!("../battery-charge-threshold.service")).unwrap();
 
         // TODO BAT0 is hardcoded
         linux_service.service.exec_start = format!(
             "/bin/bash -c 'echo {} > /sys/class/power_supply/BAT0/charge_control_end_threshold'",
-            *limit
+            limit
         );
         let service_path = "/etc/systemd/system/battery-charge-threshold.service";
-        let service_contents = serde_ini::to_string(&linux_service).unwrap();
-        sudo::escalate_if_needed().unwrap();
+        let service_contents = serde_ini::to_string(&linux_service)?;
+        sudo::escalate_if_needed()
+            .map_err(|e| e.to_string())
+            .map_err(Error::msg)?;
         fs::write(service_path, service_contents)?;
 
         let commands = [
@@ -101,41 +87,30 @@ impl BatteryLimiter {
         ];
         for cmd in commands {
             let args = cmd.split(' ');
-            process::Command::new("sudo")
-                .args(args)
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap();
+            process::Command::new("sudo").args(args).spawn()?.wait()?;
         }
 
+        println!("🔋{} -> 🔋{}", old_limit, limit);
+
         Ok(())
     }
 
-    fn get() -> anyhow::Result<()> {
-        let charge_limit =
-            fs::read_to_string("/sys/class/power_supply/BAT0/charge_control_end_threshold")
-                .unwrap();
-        println!("🔋{}", charge_limit.trim());
-        Ok(())
+    fn get() -> Result<Percent> {
+        let charge_limit = Self::get_value()?;
+        println!("🔋{}", charge_limit);
+        Ok(charge_limit)
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct Section {
-    info: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Something {
-    section: Section,
-    another_section: Option<String>,
-}
-
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
     match args.command {
-        Command::Set { value } => BatteryLimiter::set(value),
-        Command::Get => BatteryLimiter::get(),
+        Command::Set { value } => {
+            BatteryLimiter::set(value)?;
+        }
+        Command::Get => {
+            BatteryLimiter::get()?;
+        }
     }
+    Ok(())
 }
