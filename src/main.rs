@@ -9,7 +9,7 @@ use std::{fs, process};
 
 use linux_service::LinuxService;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Percent(u8);
 impl std::str::FromStr for Percent {
     type Err = String;
@@ -58,9 +58,14 @@ impl BatteryLimiter {
 
     fn set(limit: Percent) -> Result<()> {
         let old_limit = Self::get_value()?;
+        if old_limit == limit {
+            println!("🔋{} -> 🔋{}", old_limit, limit);
+            return Ok(());
+        }
+        
         const SERVICE_FILENAME: &str = "battery-charge-threshold.service";
         let mut linux_service: LinuxService =
-            serde_ini::from_str(const_format::formatcp!("../{}", SERVICE_FILENAME)).unwrap();
+            serde_ini::from_str(include_str!("../battery-charge-threshold.service")).unwrap();
 
         // TODO BAT0 is hardcoded
         linux_service.service.exec_start = format!(
