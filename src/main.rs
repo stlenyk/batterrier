@@ -11,13 +11,6 @@ use linux_service::LinuxService;
 
 #[derive(Clone)]
 struct Percent(u8);
-// impl std::ops::Deref for Percent {
-//     type Target = u8;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
 impl std::str::FromStr for Percent {
     type Err = String;
 
@@ -65,27 +58,30 @@ impl BatteryLimiter {
 
     fn set(limit: Percent) -> Result<()> {
         let old_limit = Self::get_value()?;
+        const SERVICE_FILENAME: &str = "battery-charge-threshold.service";
         let mut linux_service: LinuxService =
-            serde_ini::from_str(include_str!("../battery-charge-threshold.service")).unwrap();
+            serde_ini::from_str(const_format::formatcp!("../{}", SERVICE_FILENAME)).unwrap();
 
         // TODO BAT0 is hardcoded
         linux_service.service.exec_start = format!(
             "/bin/bash -c 'echo {} > /sys/class/power_supply/BAT0/charge_control_end_threshold'",
             limit
         );
-        let service_path = "/etc/systemd/system/battery-charge-threshold.service";
         let service_contents = serde_ini::to_string(&linux_service)?;
         sudo::escalate_if_needed()
             .map_err(|e| e.to_string())
             .map_err(Error::msg)?;
-        fs::write(service_path, service_contents)?;
+        fs::write(
+            const_format::formatcp!("/etc/systemd/system/{}", SERVICE_FILENAME),
+            service_contents,
+        )?;
 
-        let commands = [
-            "systemctl enable --now battery-charge-threshold.service",
+        const COMMANDS: [&str; 3] = [
+            const_format::formatcp!("systemctl enable --now {}", SERVICE_FILENAME),
             "systemctl daemon-reload",
-            "systemctl restart battery-charge-threshold.service",
+            const_format::formatcp!("systemctl restart {}", SERVICE_FILENAME),
         ];
-        for cmd in commands {
+        for cmd in COMMANDS {
             let args = cmd.split(' ');
             process::Command::new("sudo").args(args).spawn()?.wait()?;
         }
@@ -95,10 +91,10 @@ impl BatteryLimiter {
         Ok(())
     }
 
-    fn get() -> Result<Percent> {
+    fn get() -> Result<()> {
         let charge_limit = Self::get_value()?;
         println!("🔋{}", charge_limit);
-        Ok(charge_limit)
+        Ok(())
     }
 }
 
