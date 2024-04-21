@@ -47,30 +47,45 @@ enum Command {
     Get,
 }
 
-struct BatteryLimiter;
+struct BatteryLimiter {
+    bat_name: &'static str,
+}
 impl BatteryLimiter {
-    fn get_value() -> Result<Percent> {
-        fs::read_to_string("/sys/class/power_supply/BAT0/charge_control_end_threshold")?
-            .trim()
-            .parse::<Percent>()
-            .map_err(Error::msg)
+    fn new() -> Result<Self> {
+        const BAT_NAME: [&str; 4] = ["BAT0", "BAT1", "BATT", "BATC"];
+        for bat_name in BAT_NAME.iter() {
+            let path = format!("/sys/class/power_supply/{}", bat_name);
+            if fs::metadata(&path).is_ok() {
+                return Ok(Self { bat_name });
+            }
+        }
+        Err(Error::msg("Battery not found".to_owned()))
     }
 
-    fn set(limit: Percent) -> Result<()> {
-        let old_limit = Self::get_value()?;
+    fn get_value(&self) -> Result<Percent> {
+        fs::read_to_string(format!(
+            "/sys/class/power_supply/{}/charge_control_end_threshold",
+            self.bat_name
+        ))?
+        .trim()
+        .parse::<Percent>()
+        .map_err(Error::msg)
+    }
+
+    fn set(&self, limit: Percent) -> Result<()> {
+        let old_limit = self.get_value()?;
         if old_limit == limit {
             println!("🔋{} -> 🔋{}", old_limit, limit);
             return Ok(());
         }
-        
+
         const SERVICE_FILENAME: &str = "battery-charge-threshold.service";
         let mut linux_service: LinuxService =
             serde_ini::from_str(include_str!("../battery-charge-threshold.service")).unwrap();
 
-        // TODO BAT0 is hardcoded
         linux_service.service.exec_start = format!(
-            "/bin/bash -c 'echo {} > /sys/class/power_supply/BAT0/charge_control_end_threshold'",
-            limit
+            "/bin/bash -c 'echo {} > /sys/class/power_supply/{}/charge_control_end_threshold'",
+            limit, self.bat_name
         );
         let service_contents = serde_ini::to_string(&linux_service)?;
         sudo::escalate_if_needed()
@@ -96,8 +111,8 @@ impl BatteryLimiter {
         Ok(())
     }
 
-    fn get() -> Result<()> {
-        let charge_limit = Self::get_value()?;
+    fn get(&self) -> Result<()> {
+        let charge_limit = self.get_value()?;
         println!("🔋{}", charge_limit);
         Ok(())
     }
@@ -105,13 +120,15 @@ impl BatteryLimiter {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let battery_limiter = BatteryLimiter::new()?;
     match args.command {
         Command::Set { value } => {
-            BatteryLimiter::set(value)?;
+            battery_limiter.set(value)?;
         }
         Command::Get => {
-            BatteryLimiter::get()?;
+            battery_limiter.get()?;
         }
     }
+
     Ok(())
 }
