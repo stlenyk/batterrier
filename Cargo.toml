@@ -11,4 +11,3 @@ clap = { version = "4.4.6", features = ["derive"] }
 const_format = "0.2.32"
 serde = { version = "1.0.189", features = ["derive"] }
 serde_ini = "0.2.0"
-sudo = "0.6.0"
