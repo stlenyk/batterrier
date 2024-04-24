@@ -23,9 +23,10 @@ batterrier help
 Usage: batterrier <COMMAND>
 
 Commands:
-  set    Change battery charge limit. Needs `sudo`
+  set    Change battery charge limit
   get    Print current battery charge limit
   clean  Restore 100% battery limit and remove systemd service
+  info   Print battery info
   help   Print this message or the help of the given subcommand(s)
 
 Options:
