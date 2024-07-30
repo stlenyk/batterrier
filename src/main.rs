@@ -3,11 +3,12 @@
 mod linux_service;
 
 use anyhow::{Context, Error, Ok, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 
 use std::{
     ffi::OsStr,
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     process::{self, Stdio},
 };
@@ -36,7 +37,7 @@ impl std::fmt::Display for Percent {
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-struct Args {
+struct Cli {
     #[command(subcommand)]
     command: Command,
 }
@@ -57,6 +58,12 @@ enum Command {
     Clean,
     /// Print battery info
     Info,
+    /// Generate shell completions
+    #[command(long_about = "Generate shell completions
+        Example:
+        $ batterrier --completions zsh > _batterrier
+        $ sudo mv _batterrier /usr/local/share/zsh/site-functions")]
+    Completions { shell: Shell },
 }
 
 struct BatteryLimiter {
@@ -226,8 +233,9 @@ impl BatteryLimiter {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Cli::parse();
     let battery_limiter = BatteryLimiter::new()?;
+
     match args.command {
         Command::Set { persist, value } => {
             battery_limiter.set(&value, persist)?;
@@ -239,6 +247,14 @@ fn main() -> Result<()> {
             battery_limiter.clean()?;
         }
         Command::Info => battery_limiter.info(),
+        Command::Completions { shell } => {
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                env!("CARGO_PKG_NAME"),
+                &mut io::stdout(),
+            );
+        }
     }
 
     Ok(())
