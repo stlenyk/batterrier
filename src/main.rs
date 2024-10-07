@@ -61,7 +61,7 @@ enum Command {
     /// Generate shell completions
     #[command(long_about = "Generate shell completions
         Example:
-        $ batterrier --completions zsh > _batterrier
+        $ batterrier completions zsh > _batterrier
         $ sudo mv _batterrier /usr/local/share/zsh/site-functions")]
     Completions { shell: Shell },
 }
