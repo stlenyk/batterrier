@@ -7,10 +7,10 @@ A CLI tool for setting battery charge limit of ASUS laptops on Linux.
 ## Installation
 
 1. [Install Rust](https://www.rust-lang.org/tools/install)
-2. Install the binary: `cd` inito this project's directory and run
+2. Install the binary:
 
     ```sh
-    cargo install --path=.
+    cargo install --git=https://github.com/stlenyk/batterrier.git
     ```
 
 ## Usage
