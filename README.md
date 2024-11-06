@@ -23,11 +23,12 @@ batterrier help
 Usage: batterrier <COMMAND>
 
 Commands:
-  set    Change battery charge limit
-  get    Print current battery charge limit
-  clean  Restore 100% battery limit and remove systemd service
-  info   Print battery info
-  help   Print this message or the help of the given subcommand(s)
+  set          Change battery charge limit
+  get          Print current battery charge limit
+  clean        Restore 100% battery limit and remove systemd service
+  info         Print battery info
+  completions  Generate shell completions
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -56,7 +57,10 @@ Options:
 ```
 $ batterrier set 60 --persist
 🔋100 -> 🔋60
+$ batterrier set 80
+🔋60 -> 🔋80
 Creating systemd service
 $ batterrier get
-🔋60
+current: 🔋80
+persisted: 🔋60
 ```

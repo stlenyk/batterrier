@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-
 /// Represents a systemd service file
 pub struct LinuxService {
     pub unit: Unit,

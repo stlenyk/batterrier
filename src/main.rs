@@ -5,6 +5,7 @@ mod linux_service;
 use anyhow::{Context, Error, Ok, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use regex::Regex;
 
 use std::{
     ffi::OsStr,
@@ -15,13 +16,13 @@ use std::{
 
 use linux_service::LinuxService;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Percent(u8);
 impl std::str::FromStr for Percent {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        const ERR_MSG: &str = "Percent must be an number between 0 and 100";
+        const ERR_MSG: &str = "Percent must be a number between 0 and 100";
         let value = s.parse().map_err(|_e| ERR_MSG)?;
         if value > 100 {
             return std::result::Result::Err(ERR_MSG.to_owned());
@@ -167,9 +168,30 @@ impl BatteryLimiter {
         Ok(())
     }
 
+    fn get_persisted(&self) -> Option<Percent> {
+        let persisted_service: LinuxService =
+            serde_ini::from_str(&fs::read_to_string(Self::SERVICE_PATH).ok()?).ok()?;
+        let re = Regex::new(r"/bin/bash -c 'echo \b(\d+)\b > /sys/class/power_supply/BAT0/charge_control_end_threshold'").unwrap();
+        re.captures(&persisted_service.service.exec_start)?
+            .get(1)?
+            .as_str()
+            .parse()
+            .ok()
+    }
+
     fn get(&self) -> Result<()> {
-        let charge_limit = self.get_value()?;
-        println!("🔋{charge_limit}");
+        let current_limit = self.get_value()?;
+        let persisted_limit = self.get_persisted();
+        println!("current: 🔋{current_limit}");
+        println!(
+            "persisted: {}",
+            if let Some(persisted_limit) = persisted_limit {
+                format!("🔋{persisted_limit}")
+            } else {
+                "Not set".to_owned()
+            }
+        );
+
         Ok(())
     }
 
@@ -258,4 +280,16 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::linux_service::LinuxService;
+
+    #[test]
+    fn service() {
+        let service: Result<LinuxService, _> =
+            serde_ini::from_str(include_str!("../battery-charge-threshold.service"));
+        assert!(service.is_ok());
+    }
 }

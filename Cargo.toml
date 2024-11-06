@@ -7,8 +7,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-clap = { version = "4.5.11", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5.11"
 const_format = "0.2.32"
+regex = "1.11.1"
 serde = { version = "1.0.189", features = ["derive"] }
 serde_ini = "0.2.0"
