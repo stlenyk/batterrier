@@ -256,19 +256,18 @@ impl BatteryLimiter {
 
 fn main() -> Result<()> {
     let args = Cli::parse();
-    let battery_limiter = BatteryLimiter::new()?;
 
     match args.command {
         Command::Set { persist, value } => {
-            battery_limiter.set(&value, persist)?;
+            BatteryLimiter::new()?.set(&value, persist)?;
         }
         Command::Get => {
-            battery_limiter.get()?;
+            BatteryLimiter::new()?.get()?;
         }
         Command::Clean => {
-            battery_limiter.clean()?;
+            BatteryLimiter::new()?.clean()?;
         }
-        Command::Info => battery_limiter.info(),
+        Command::Info => BatteryLimiter::new()?.info(),
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,
